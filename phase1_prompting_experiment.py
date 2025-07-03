@@ -19,14 +19,15 @@ class PromptingExperiment:
         5가지 다른 프롬프트로 Kanana 8B 성능 테스트
         """
         print(f"Loading {model_name}...")
+        self.model_name = model_name
 
         # vLLM 모델 로드
         self.llm = LLM(
-            model=model_name,
+            model=self.model_name,
             dtype="bfloat16",     # 또는 "float16", "auto"
             trust_remote_code=True,
             max_model_len=1300,   # 최대 입력 길이
-            gpu_memory_utilization=0.7,  # GPU 메모리 사용률
+            gpu_memory_utilization=0.9,  # GPU 메모리 사용률
         )
         
         # Sampling 파라미터 설정
@@ -77,8 +78,6 @@ class PromptingExperiment:
 
 2. **단답형 (Short Answer)**  
    - 5어절 이내의 **간결하고 정확한 명사 또는 구**로 답하십시오.  
-   - **동일 의미의 다양한 표현이 존재할 경우**, 이를 **`#` 기호로 구분**하여 나열하십시오.  
-     - 예: "탈춤#탈놀이#탈놀음#가면극#산대놀이#야류#오광대"
 
 3. **서술형 (Descriptive Answer)**  
    - 500자 이내로 **신뢰할 수 있고 일관성 있는 문장으로 설명**하십시오.
@@ -101,7 +100,7 @@ class PromptingExperiment:
         if question_type == "선다형":
             format_instruction = "보기 중 정답에 해당하는 **번호만 숫자**로 출력하십시오."
         elif question_type == "단답형":
-            format_instruction = "5어절 이내의 **간결하고 정확한 명사 또는 구**로 답하십시오. 동일 의미의 다양한 표현이 존재할 경우, 이를 `#` 기호로 구분하여 나열하십시오."
+            format_instruction = "5어절 이내의 **간결하고 정확한 명사 또는 구**로 답하십시오."
         else:  # 서술형
             format_instruction = "500자 이내로 **신뢰할 수 있고 일관성 있는 문장으로 설명**하십시오."
 
@@ -152,70 +151,111 @@ class PromptingExperiment:
         return 1 if pred == true_answer else 0
     
     def evaluate_short_answer(self, pred_answer, true_answer):
-        """단답형 평가"""
-        pred_clean = re.sub(r'[^\w가-힣]', '', pred_answer.lower())
-        true_clean = re.sub(r'[^\w가-힣]', '', true_answer.lower())
+        # """단답형 평가"""
+        # pred_clean = re.sub(r'[^\w가-힣]', '', pred_answer.lower())
+        # true_clean = re.sub(r'[^\w가-힣]', '', true_answer.lower())
         
-        # Exact match
-        exact_match = 1 if pred_clean == true_clean else 0
+        # # Exact match
+        # exact_match = 1 if pred_clean == true_clean else 0
         
-        # Partial match (포함 관계)
-        partial_match = 1 if true_clean in pred_clean or pred_clean in true_clean else 0
+        # # Partial match (포함 관계)
+        # partial_match = 1 if true_clean in pred_clean or pred_clean in true_clean else 0
         
-        return exact_match, partial_match
+        # return exact_match, partial_match
+
+        """
+        Calculate Exact Match score where true_data may contain multiple acceptable answers separated by #
+        """
+        correct = 0
+        true_answer_list = true_answer.split('#')
+
+        if any(pred_answer.strip() == ans.strip() for ans in true_answer_list):
+            correct = 1
+                
+        return correct
     
     def evaluate_long_answer(self, pred_answer, true_answer):
-        """서술형 평가 (ROUGE 사용)"""
-        scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=False)
-        scores = scorer.score(true_answer, pred_answer)
-        
+        """서술형 평가 (ROUGE-1, ROUGE-2, ROUGE-L via rouge_metric)"""
+        from rouge_metric import Rouge
+
+        rouge_evaluator = Rouge(
+            metrics=["rouge-n", "rouge-l"],
+            max_n=2,
+            limit_length=True,
+            length_limit=1000,
+            length_limit_type="words",
+            use_tokenizer=True,
+            apply_avg=True,
+            apply_best=False,
+            alpha=0.5,        # F1 score
+            weight_factor=1.0,
+        )
+
+        # 단일 문장 pair도 리스트로 감싸서 전달
+        scores = rouge_evaluator.get_scores(
+            [pred_answer],
+            [true_answer]
+        )
+
         return {
-            'rouge1': scores['rouge1'].fmeasure,
-            'rouge2': scores['rouge2'].fmeasure,
-            'rougeL': scores['rougeL'].fmeasure
+            'rouge1':   scores['rouge-1']['f'],
+            'rouge2':   scores['rouge-2']['f'],
+            'rougeL':   scores['rouge-l']['f']
         }
-    def calc_BLEU(self, true, pred, apply_avg=True, apply_best=False, use_mecab=True):
+
+    def calc_BLEU(self, pred_answer: str, true_answer: str, apply_avg=True, apply_best=False, use_mecab=True):
         from nltk.translate.bleu_score import sentence_bleu
         from konlpy.tag import Mecab
 
         tokenizer = Mecab()
         stacked_bleu = []
 
-        if isinstance(true[0], str):
-            true = [[t] for t in true]
+        # 1) 단일 문자열을 참조 리스트로 감싸기
+        refs = [true_answer]  # 리스트 of reference strings
+        cand = pred_answer    # 하나의 candidate string
 
-        for i in range(len(true)):
-            best_bleu = 0
-            sum_bleu = 0
-            for ref_text in true[i]:
-                if use_mecab:
-                    ref   = tokenizer.morphs(ref_text)
-                    candi = tokenizer.morphs(pred[i])
-                else:
-                    ref   = ref_text.split()
-                    candi = pred[i].split()
+        # 2) 토크나이징
+        if use_mecab:
+            cand_tokens = tokenizer.morphs(cand)
+        else:
+            cand_tokens = cand.split()
 
-                score = sentence_bleu([ref], candi, weights=(1, 0, 0, 0))
-                sum_bleu   += score
-                best_bleu   = max(best_bleu, score)
+        # 3) 각 ref 텍스트별로 BLEU 계산
+        best_bleu = 0
+        sum_bleu  = 0
+        for ref_text in refs:
+            if use_mecab:
+                ref_tokens = tokenizer.morphs(ref_text)
+            else:
+                ref_tokens = ref_text.split()
 
-            avg_bleu = sum_bleu / len(true[i])
-            if apply_best:  stacked_bleu.append(best_bleu)
-            if apply_avg:   stacked_bleu.append(avg_bleu)
+            score = sentence_bleu([ref_tokens], cand_tokens, weights=(1, 0, 0, 0))
+            sum_bleu  += score
+            best_bleu = max(best_bleu, score)
 
-        return sum(stacked_bleu) / len(stacked_bleu)
+        # 4) 평균
+        avg_bleu = sum_bleu / len(refs)  # 이제 len(refs) == 1
 
-    def calc_bertscore(self, true, pred):
-        import evaluate
-        bert_scorer = evaluate.load('bertscore')
-        scores = bert_scorer.compute(
-            predictions=pred,
-            references=true,
-            model_type='bert-base-multilingual-cased',
-            lang='ko',
-            batch_size=1,
-        )
-        return sum(scores['f1']) / len(scores['f1'])
+        # 5) 결과 수집
+        if apply_best:
+            stacked_bleu.append(best_bleu)
+        if apply_avg:
+            stacked_bleu.append(avg_bleu)
+
+        return sum(stacked_bleu) / len(stacked_bleu) if stacked_bleu else 0.0
+
+
+    # def calc_bertscore(self, true, pred):
+    #     import evaluate
+    #     bert_scorer = evaluate.load('bertscore')
+    #     scores = bert_scorer.compute(
+    #         predictions=pred,
+    #         references=true,
+    #         model_type='bert-base-multilingual-cased',
+    #         lang='ko',
+    #         batch_size=1,
+    #     )
+    #     return sum(scores['f1']) / len(scores['f1'])
 
     # def calc_bleurt(self, true, pred):
     #     from bleurt import score
@@ -262,10 +302,10 @@ class PromptingExperiment:
                     sample_results[f'{prompt_name}_score'] = score
                     
                 elif question_type == "단답형":
-                    exact, partial = self.evaluate_short_answer(pred_answer, true_answer)
+                    exact = self.evaluate_short_answer(pred_answer, true_answer)
                     sample_results[f'{prompt_name}_pred'] = pred_answer
                     sample_results[f'{prompt_name}_exact'] = exact
-                    sample_results[f'{prompt_name}_partial'] = partial
+                    # sample_results[f'{prompt_name}_partial'] = partial
                     
                 else:  # 서술형
                     # 1) Rouge
@@ -276,15 +316,15 @@ class PromptingExperiment:
                     sample_results[f'{prompt_name}_rougeL'] = rouge_scores['rougeL']
 
                     # 2) BLEU
-                    bleu_score = self.calc_BLEU([true_answer], [pred_answer])
+                    bleu_score = self.calc_BLEU(pred_answer, true_answer)
                     sample_results[f'{prompt_name}_bleu'] = bleu_score
 
                     # 3) BERTScore 
-                    bertscore = self.calc_bertscore(
-                        [true_answer],
-                        [pred_answer],
-                    )
-                    sample_results[f'{prompt_name}_bertscore'] = bertscore
+                    # bertscore = self.calc_bertscore(
+                    #     [true_answer],
+                    #     [pred_answer],
+                    # )
+                    # sample_results[f'{prompt_name}_bertscore'] = bertscore
 
                     # 4) BLEURT
                     # bleurt_score = self.calc_bleurt(
@@ -303,7 +343,7 @@ class PromptingExperiment:
     
     def save_intermediate_results(self, results, current_idx):
         """중간 결과 저장"""
-        save_path = f"phase1_intermediate_results_{current_idx}.json"
+        save_path = f"results/phase1_{self.model_name}_intermediate_results_{current_idx}.json"
         with open(save_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
     
@@ -328,10 +368,10 @@ class PromptingExperiment:
                     
                 elif question_type == "단답형":
                     exact_scores = [item[f'{prompt_name}_exact'] for item in type_data]
-                    partial_scores = [item[f'{prompt_name}_partial'] for item in type_data]
+                    # partial_scores = [item[f'{prompt_name}_partial'] for item in type_data]
                     analysis[question_type][prompt_name] = {
                         'exact_match': np.mean(exact_scores),
-                        'partial_match': np.mean(partial_scores),
+                        # 'partial_match': np.mean(partial_scores),
                         'count': len(exact_scores)
                     }
                     
@@ -340,14 +380,14 @@ class PromptingExperiment:
                     rouge2_scores = [item[f'{prompt_name}_rouge2'] for item in type_data]
                     rougeL_scores = [item[f'{prompt_name}_rougeL'] for item in type_data]
                     bleu_scores     = [item[f'{prompt_name}_bleu']      for item in type_data]
-                    bert_scores     = [item[f'{prompt_name}_bertscore'] for item in type_data]
+                    # bert_scores     = [item[f'{prompt_name}_bertscore'] for item in type_data]
                     # bleurt_scores   = [item[f'{prompt_name}_bleurt']   for item in type_data]
                     analysis[question_type][prompt_name] = {
                         'rouge1': np.mean(rouge1_scores),
                         'rouge2': np.mean(rouge2_scores),
                         'rougeL': np.mean(rougeL_scores),
                         'bleu': np.mean(bleu_scores),
-                        'bertscore': np.mean(bert_scores),
+                        # 'bertscore': np.mean(bert_scores),
                         # 'bleurt': np.mean(bleurt_scores),
                         'count': len(rouge1_scores)
                     }
@@ -370,7 +410,8 @@ class PromptingExperiment:
                     
             elif question_type == "단답형":
                 for prompt_name, metrics in type_results.items():
-                    print(f"{prompt_name:15}: Exact = {metrics['exact_match']:.3f}, Partial = {metrics['partial_match']:.3f} (n={metrics['count']})")
+                    print(f"{prompt_name:15}: Exact = {metrics['exact_match']:.3f}, (n={metrics['count']})")
+                    # print(f"{prompt_name:15}: Exact = {metrics['exact_match']:.3f}, Partial = {metrics['partial_match']:.3f} (n={metrics['count']})")
                     
             else:  # 서술형
                 for prompt_name, metrics in type_results.items():
@@ -380,7 +421,7 @@ class PromptingExperiment:
                         f"ROUGE-2 = {metrics['rouge2']:.3f}, "
                         f"ROUGE-L = {metrics['rougeL']:.3f}, "
                         f"BLEU = {metrics['bleu']:.3f}, "
-                        f"BERTScore = {metrics['bertscore']:.3f}, "
+                        # f"BERTScore = {metrics['bertscore']:.3f}, "
                         # f"BLEURT = {metrics['bleurt']:.3f} "
                         f"(n={metrics['count']})"
                     )
@@ -418,16 +459,16 @@ class PromptingExperiment:
     def save_final_results(self, results, analysis):
         """최종 결과 저장"""
         # 상세 결과
-        with open('phase1_detailed_results.json', 'w', encoding='utf-8') as f:
+        with open(f'results/phase1_{self.model_name}_detailed_results.json', 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
         
         # 분석 요약
-        with open('phase1_analysis_summary.json', 'w', encoding='utf-8') as f:
+        with open(f'results/phase1_{self.model_name}_analysis_summary.json', 'w', encoding='utf-8') as f:
             json.dump(analysis, f, ensure_ascii=False, indent=2)
         
         print(f"\n💾 결과 저장 완료:")
-        print(f"   - phase1_detailed_results.json")
-        print(f"   - phase1_analysis_summary.json")
+        print(f"   - phase1_{self.model_name}_detailed_results.json")
+        print(f"   - phase1_{self.model_name}_analysis_summary.json")
 
 def main():
     """메인 실행 함수"""
