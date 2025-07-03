@@ -3,8 +3,8 @@ set -e
 
 # Phase 1: Prompting Experiment for Korean Culture QA
 model_list=(
-   "skt/A.X-4.0-Light"
-   "kakaocorp/kanana-1.5-8b-instruct-2505"
+#    "skt/A.X-4.0-Light"
+#    "kakaocorp/kanana-1.5-8b-instruct-2505"
    "Qwen/Qwen3-8B"
 )
 
