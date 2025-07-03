@@ -80,9 +80,7 @@ class PromptingExperiment:
    - 5어절 이내의 **간결하고 정확한 명사 또는 구**로 답하십시오.  
 
 3. **서술형 (Descriptive Answer)**  
-   - 500자 이내로 **신뢰할 수 있고 일관성 있는 문장으로 설명**하십시오.
-
-답변은 질문에만 집중하고, 불필요한 부연 설명이나 반복은 피하십시오."""
+   - 500자 이내로 **신뢰할 수 있고 일관성 있는 문장으로 설명**하십시오."""
 
         # 1. Baseline: question만
         prompts['baseline'] = {"system_prompt":system_prompt, "user_prompt":f"질문: {question}\n답변:"}
@@ -343,7 +341,7 @@ class PromptingExperiment:
     
     def save_intermediate_results(self, results, current_idx):
         """중간 결과 저장"""
-        save_path = f"results/phase1_{self.model_name}_intermediate_results_{current_idx}.json"
+        save_path = f"results/phase1_{self.model_name.split('/')[-1]}_intermediate_results_{current_idx}.json"
         with open(save_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
     
@@ -459,16 +457,16 @@ class PromptingExperiment:
     def save_final_results(self, results, analysis):
         """최종 결과 저장"""
         # 상세 결과
-        with open(f'results/phase1_{self.model_name}_detailed_results.json', 'w', encoding='utf-8') as f:
+        with open(f'results/phase1_{self.model_name.split("/")[-1]}_detailed_results.json', 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
         
         # 분석 요약
-        with open(f'results/phase1_{self.model_name}_analysis_summary.json', 'w', encoding='utf-8') as f:
+        with open(f'results/phase1_{self.model_name.split("/")[-1]}_analysis_summary.json', 'w', encoding='utf-8') as f:
             json.dump(analysis, f, ensure_ascii=False, indent=2)
         
         print(f"\n💾 결과 저장 완료:")
-        print(f"   - phase1_{self.model_name}_detailed_results.json")
-        print(f"   - phase1_{self.model_name}_analysis_summary.json")
+        print(f"   - phase1_{self.model_name.split('/')[-1]}_detailed_results.json")
+        print(f"   - phase1_{self.model_name.split('/')[-1]}_analysis_summary.json")
 
 def main():
     """메인 실행 함수"""
