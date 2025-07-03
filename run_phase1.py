@@ -26,7 +26,7 @@ def main():
     
     # 실험 초기화
     experiment = PromptingExperiment(args.model)
-    experiment.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    experiment.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # 데이터 로드
     train_data, dev_data = experiment.load_data(args.data_path)
