@@ -32,11 +32,10 @@ class PromptingExperiment:
         
         # Sampling 파라미터 설정
         self.sampling_params = SamplingParams(
-            max_tokens=1024,
+            max_tokens=2048,
             temperature=0.6,
             top_p=0.95
         )
-        
         
     def load_data(self, data_path="data"):
         """데이터 로드"""
@@ -46,9 +45,11 @@ class PromptingExperiment:
             train_data = json.load(f)
         with open(data_dir / "dev.json", "r", encoding="utf-8") as f:
             dev_data = json.load(f)
-            
-        print(f"Loaded {len(train_data)} train samples, {len(dev_data)} dev samples")
-        return train_data, dev_data
+        with open(data_dir / "test.json", "r", encoding="utf-8") as f:
+            test_data = json.load(f)
+        
+        print(f"Loaded {len(train_data)} train, {len(dev_data)} dev" + (f", {len(test_data)} test" if test_data else ""))
+        return train_data, dev_data, test_data
     
     def create_prompts(self, sample):
         """5가지 프롬프트 생성"""
@@ -61,9 +62,18 @@ class PromptingExperiment:
         prompts = {}
         
         # 0. System prompt: 전문가 역할 부여
-        system_prompt = "당신은 한국 문화 전문가입니다. 다음 질문에 정확하고 적절하게 답변해주세요."
+        system_prompt = """당신은 한국 문화 전문가입니다. 다음 질문에 정확하고 적절하게 답변해주세요.
+당신의 답변은 다음과 같은 형식을 따라야 합니다:
+1. **선다형 (Multiple Choice)**  
+   - 보기 중 정답에 해당하는 번호만 **숫자**로 출력하십시오.
 
-        detailed_system_prompt = """당신은 다양한 문화 지식, 관점, 실행에 기반하여 질문에 신뢰도 높고 정확한 답변을 생성하는 한국어 전문가 AI입니다.
+2. **단답형 (Short Answer)**  
+   - 5어절 이내의 **명사 또는 구**로 답하십시오.  
+
+3. **서술형 (Descriptive Answer)**  
+   - 500자 이내의 문장으로 설명하십시오."""
+
+        detailed_system_prompt = """당신은 한국의 문화에 기반하여 질문에 신뢰도 높고 정확한 답변을 생성하는 한국어 전문가 AI입니다.
 
 사용자가 입력한 다음 정보를 참고하여 문제에 가장 적합한 정답을 작성하십시오:
 - 질문 유형(question_type): '선다형', '단답형', 또는 '서술형' 중 하나
@@ -71,40 +81,39 @@ class PromptingExperiment:
 - 질문 내용(question): 사용자가 직접 묻는 질문
 - 카테고리(category) 및 도메인(domain): 질문이 속한 전반적인 지식 분야
 
-**출력 형식은 다음과 같이 엄격하게 지켜야 합니다:**
-
+당신의 답변은 다음과 같은 형식을 따라야 합니다:
 1. **선다형 (Multiple Choice)**  
-   - 보기 중 정답에 해당하는 **번호만 숫자**로 출력하십시오.
+   - 보기 중 정답에 해당하는 번호만 **숫자**로 출력하십시오.
 
 2. **단답형 (Short Answer)**  
-   - 5어절 이내의 **간결하고 정확한 명사 또는 구**로 답하십시오.  
+   - 5어절 이내의 **명사 또는 구**로 답하십시오.  
 
 3. **서술형 (Descriptive Answer)**  
-   - 500자 이내로 **신뢰할 수 있고 일관성 있는 문장으로 설명**하십시오."""
+   - 500자 이내의 문장으로 설명하십시오."""
 
         # 1. Baseline: question만
-        prompts['baseline'] = {"system_prompt":system_prompt, "user_prompt":f"질문: {question}\n답변:"}
+        # prompts['baseline'] = {"system_prompt":system_prompt, "user_prompt":f"주어진 질문에 적절한 답변을 해주세요.\n질문: {question}\n답변:"}
         
         # 2. Simple: question_type + question
-        prompts['simple'] = {"system_prompt":system_prompt, "user_prompt":f"[{question_type}] {question}\n답변:"}
+        # prompts['simple'] = {"system_prompt":system_prompt, "user_prompt":f"주어진 질문에 적절한 답변을 해주세요.\n<{question_type}>\n<질문>\n{question}\n답변:"}
         
         # 3. Rich: 모든 메타데이터 포함
-        prompts['rich'] = {"system_prompt":system_prompt, "user_prompt":f"분류: {category}\n도메인: {domain}\n주제: {topic_keyword}\n답변 유형: {question_type}\n\n질문: {question}\n답변:"}
+        prompts['rich'] = {"system_prompt":system_prompt, "user_prompt":f"주어진 질문에 적절한 답변을 해주세요.\n\n분류: {category}\n도메인: {domain}\n주제: {topic_keyword}\n답변 유형: {question_type}\n\n<질문>\n{question}\n\n답변:"}
 
         # 4. Expert: 전문가 역할 부여
-        prompts['expert'] = {"system_prompt":system_prompt, "user_prompt":f"당신은 한국 문화 전문가입니다. 다음 질문에 정확하고 적절하게 답변해주세요.\n질문: {question}\n답변:"}
+        # prompts['expert'] = {"system_prompt":system_prompt, "user_prompt":f"당신은 한국 문화 전문가입니다. 다음 질문에 정확하고 적절하게 답변해주세요.\n질문: {question}\n답변:"}
 
         # 5. Format-aware: 답변 형식 명시
         if question_type == "선다형":
-            format_instruction = "보기 중 정답에 해당하는 **번호만 숫자**로 출력하십시오."
+            format_instruction = "보기 중 정답에 해당하는 번호만 **숫자**로 출력하십시오."
         elif question_type == "단답형":
-            format_instruction = "5어절 이내의 **간결하고 정확한 명사 또는 구**로 답하십시오."
+            format_instruction = "5어절 이내의 **명사 또는 구**로 답하십시오."
         else:  # 서술형
-            format_instruction = "500자 이내로 **신뢰할 수 있고 일관성 있는 문장으로 설명**하십시오."
+            format_instruction = "500자 이내의 문장으로 설명하십시오."
 
-        prompts['format_aware'] = {"system_prompt":system_prompt, "user_prompt":f"[{question_type}] {question}\n\n{format_instruction}\n답변:"}
+        prompts['format_aware'] = {"system_prompt":system_prompt, "user_prompt":f"주어진 질문에 적절한 답변을 해주세요.\n\n<{question_type}>\n{format_instruction}\n\n<질문>\n{question}\n\n답변:"}
 
-        prompts['detailed'] = {"system_prompt":detailed_system_prompt, "user_prompt":f"category: {category}\ndomain: {domain}\ntopic_keyword: {topic_keyword}\nquestion_type: {question_type}\n\n질문: {question}\n답변:"}
+        prompts['detailed'] = {"system_prompt":detailed_system_prompt, "user_prompt":f"주어진 질문에 적절한 답변을 해주세요.\n\ncategory: {category}\ndomain: {domain}\ntopic_keyword: {topic_keyword}\nquestion_type: {question_type}\n\n<질문>\n{question}\n\n답변:"}
 
         return prompts
     
@@ -263,7 +272,7 @@ class PromptingExperiment:
     #     scores = scorer.score(references=flat_true, candidates=pred, batch_size=64)
     #     return sum(scores) / len(scores)
 
-    def run_experiment(self, data, sample_size=None, save_results=True):
+    def run_experiment(self, data, sample_size=None, save_results=True, test_mode=False):
         """실험 실행"""
         if sample_size:
             data = data[:sample_size]
@@ -277,7 +286,7 @@ class PromptingExperiment:
         
         for i, sample in enumerate(tqdm(data, desc="Running experiments")):
             question_type = sample['input']['question_type']
-            true_answer = sample['output']['answer']
+            true_answer = sample['output']['answer'] if 'output' in sample else None
             
             # 5가지 프롬프트 생성
             prompts = self.create_prompts(sample)
@@ -292,23 +301,25 @@ class PromptingExperiment:
             # 각 프롬프트로 답변 생성 및 평가
             for prompt_name, prompt in prompts.items():
                 pred_answer = self.generate_answer(prompt=prompt)
+                sample_results[f'{prompt_name}_pred'] = pred_answer
+                if '</think>' in pred_answer:
+                    pred_answer = pred_answer.split('</think>')[-1].strip()
                 
+                if test_mode:
+                    continue  # 평가 스킵
                 # 질문 유형별 평가
                 if question_type == "선다형":
                     score = self.evaluate_multiple_choice(pred_answer, true_answer)
-                    sample_results[f'{prompt_name}_pred'] = pred_answer
                     sample_results[f'{prompt_name}_score'] = score
                     
                 elif question_type == "단답형":
                     exact = self.evaluate_short_answer(pred_answer, true_answer)
-                    sample_results[f'{prompt_name}_pred'] = pred_answer
                     sample_results[f'{prompt_name}_exact'] = exact
                     # sample_results[f'{prompt_name}_partial'] = partial
                     
                 else:  # 서술형
                     # 1) Rouge
                     rouge_scores = self.evaluate_long_answer(pred_answer, true_answer)
-                    sample_results[f'{prompt_name}_pred'] = pred_answer
                     sample_results[f'{prompt_name}_rouge1'] = rouge_scores['rouge1']
                     sample_results[f'{prompt_name}_rouge2'] = rouge_scores['rouge2']
                     sample_results[f'{prompt_name}_rougeL'] = rouge_scores['rougeL']
@@ -356,7 +367,8 @@ class PromptingExperiment:
             type_data = results[question_type]
             analysis[question_type] = {}
             
-            for prompt_name in ['baseline', 'simple', 'rich', 'expert', 'format_aware', 'detailed']:
+            # for prompt_name in ['baseline', 'simple', 'rich', 'expert', 'format_aware', 'detailed']:
+            for prompt_name in ['_'.join(x.split('_')[:-1]) for x in type_data[0].keys() if x.endswith('_pred')]:
                 if question_type == "선다형":
                     scores = [item[f'{prompt_name}_score'] for item in type_data]
                     analysis[question_type][prompt_name] = {
@@ -429,7 +441,7 @@ class PromptingExperiment:
         print("-" * 30)
         
         prompt_scores = {}
-        for prompt_name in ['baseline', 'simple', 'rich', 'expert', 'format_aware', 'detailed']:
+        for prompt_name in analysis['선다형'].keys():
             total_score = 0
             total_count = 0
             
@@ -477,7 +489,7 @@ def main():
     experiment = PromptingExperiment("beomi/Kanana-8B")
     
     # 데이터 로드
-    train_data, dev_data = experiment.load_data()
+    train_data, dev_data, test_data = experiment.load_data()
     
     # Dev set으로 실험 (시간 절약을 위해)
     print(f"\n🔬 Dev set으로 실험 시작 (n={len(dev_data)})")

@@ -1,0 +1,20 @@
+Running model: skt/A.X-4.0-Light
+Loading safetensors checkpoint shards:   0% Completed | 0/3 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  33% Completed | 1/3 [00:00<00:01,  1.25it/s]
+Loading safetensors checkpoint shards:  67% Completed | 2/3 [00:01<00:00,  1.26it/s]
+Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:02<00:00,  1.24it/s]
+Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:02<00:00,  1.24it/s]
+
+Running experiments:   0%|          | 0/394 [00:00<?, ?it/s]Running experiments:   0%|          | 0/394 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/workspace/korean_culture_QA_2025/run_phase1.py", line 69, in <module>
+    main() 
+    ^^^^^^
+  File "/workspace/korean_culture_QA_2025/run_phase1.py", line 51, in main
+    results = experiment.run_experiment(data_to_use, sample_size=args.sample_size, test_mode=test_mode)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/korean_culture_QA_2025/phase1_prompting_experiment.py", line 289, in run_experiment
+    true_answer = sample['output']['answer'] if 'answer' in sample['output'] else None
+                                                            ~~~~~~^^^^^^^^^^
+KeyError: 'output'
+Running model: skt/A.X-4.0-Light

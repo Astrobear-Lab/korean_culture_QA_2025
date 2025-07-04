@@ -14,7 +14,8 @@ def main():
     parser.add_argument("--data_path", default="data", help="Path to data directory")
     parser.add_argument("--sample_size", type=int, default=None, help="Number of samples to test (default: all)")
     parser.add_argument("--use_train", action="store_true", help="Use train set instead of dev set")
-    
+    parser.add_argument("--use_test", action="store_true", help="Use test set instead of dev set")
+
     args = parser.parse_args()
     
     print(f"🚀 Phase 1 실험 시작")
@@ -29,25 +30,35 @@ def main():
     experiment.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # 데이터 로드
-    train_data, dev_data = experiment.load_data(args.data_path)
-    
-    # 사용할 데이터 선택
-    data_to_use = train_data if args.use_train else dev_data
-    dataset_name = "train" if args.use_train else "dev"
+    train_data, dev_data, test_data = experiment.load_data(args.data_path)
+
+    if args.use_test:
+        data_to_use = test_data
+        dataset_name = "test"
+        test_mode = True
+    elif args.use_train:
+        data_to_use = train_data
+        dataset_name = "train"
+        test_mode = False
+    else:
+        data_to_use = dev_data
+        dataset_name = "dev"
+        test_mode = False
     
     print(f"\n🔬 {dataset_name} set으로 실험 시작 (n={len(data_to_use)})")
     
     # 실험 실행
-    results = experiment.run_experiment(data_to_use, sample_size=args.sample_size)
-    
-    # 결과 분석
-    analysis = experiment.analyze_results(results)
-    
-    # 결과 출력
-    experiment.print_analysis(analysis)
-    
-    # 결과 저장
-    experiment.save_final_results(results, analysis)
+    results = experiment.run_experiment(data_to_use, sample_size=args.sample_size, test_mode=test_mode)
+
+    if not test_mode:
+        analysis = experiment.analyze_results(results)
+        experiment.print_analysis(analysis)
+        experiment.save_final_results(results, analysis)
+    else:
+        save_path = f'results/phase1_{args.model.split("/")[-1]}_test_outputs.json'
+        with open(save_path, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"\n💾 테스트셋 결과 저장 완료: {save_path}")
     
     print(f"\n✅ Phase 1 실험 완료!")
     print(f"📊 결과 파일:")

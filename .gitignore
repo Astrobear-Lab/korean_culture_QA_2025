@@ -2,3 +2,7 @@
 /__pycache__
 run_phase1.log
 ex.ipynb
+dev.log
+test.log
+nohup.out
+data_preprocessing.ipynb
