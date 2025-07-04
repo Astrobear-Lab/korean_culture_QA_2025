@@ -53,7 +53,7 @@ Kanana 1.5 8B Instruct 모델(`kakaocorp/kanana-1.5-8b-instruct-2505`)로 5가�
 
 ### 1. 패키지 설치
 ```bash
-pip install -r requirements_phase1.txt
+pip install -r requirements.txt
 ```
 
 ### 2. 모델명 확인
