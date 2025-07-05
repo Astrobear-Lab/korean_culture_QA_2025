@@ -1,19 +1,7 @@
-import json
-import pandas as pd
-from pathlib import Path
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from tqdm import tqdm
-import re
-from sklearn.metrics import accuracy_score, f1_score
-import numpy as np
-from rouge_score import rouge_scorer
-import warnings
-from vllm import LLM, SamplingParams
-warnings.filterwarnings('ignore')
+from __init__ import *
 
 class PromptingExperiment:
-    def __init__(self, model_name="beomi/Kanana-8B"):
+    def __init__(self, model_name="beomi/Kanana-8B", load_model: bool = True):
         """
         Phase 1: 프롬프팅 실험
         5가지 다른 프롬프트로 Kanana 8B 성능 테스트
@@ -21,22 +9,25 @@ class PromptingExperiment:
         print(f"Loading {model_name}...")
         self.model_name = model_name
 
-        # vLLM 모델 로드
-        self.llm = LLM(
-            model=self.model_name,
-            dtype="bfloat16",     # 또는 "float16", "auto"
-            trust_remote_code=True,
-            max_model_len=1300,   # 최대 입력 길이
-            gpu_memory_utilization=0.9,  # GPU 메모리 사용률
-        )
-        
-        # Sampling 파라미터 설정
-        self.sampling_params = SamplingParams(
-            max_tokens=2048,
-            temperature=0.6,
-            top_p=0.95
-        )
-        
+        self.llm = None
+        self.sampling_params = None
+        if load_model:
+            print(f"Loading {model_name}...")
+            self.llm = LLM(
+                model=self.model_name,
+                dtype="bfloat16",     # 또는 "float16", "auto"
+                trust_remote_code=True,
+                max_model_len=1300,   # 최대 입력 길이
+                gpu_memory_utilization=0.9,  # GPU 메모리 사용률
+            )
+
+            # Sampling 파라미터 설정 (모델 로드 여부와 상관없이 준비)
+            self.sampling_params = SamplingParams(
+                max_tokens=2048,
+                temperature=0.6,
+                top_p=0.95
+            )
+            
     def load_data(self, data_path="data"):
         """데이터 로드"""
         data_dir = Path(data_path)
@@ -345,7 +336,7 @@ class PromptingExperiment:
             results[question_type].append(sample_results)
             
             # 중간 저장 (10개마다)
-            if (i + 1) % 10 == 0 and save_results:
+            if ((i + 1) % 10 == 0) or (i + 1 == len(data)) and save_results:
                 self.save_intermediate_results(results, i + 1)
         
         return results
@@ -356,6 +347,51 @@ class PromptingExperiment:
         with open(save_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
     
+    def only_scoring(self, data: dict) -> dict:
+        """
+        data: {
+        "선다형": [ { "id":..., "question_type":"선다형", "true_answer":..., "question":..., 
+                    "rich_pred":..., "format_aware_pred":..., ... }, … ],
+        "단답형": [ … ],
+        "서술형": [ … ]
+        }
+        """
+        results = {
+            '선다형': [],
+            '단답형': [],
+            '서술형': []
+        }
+
+        for q_type, samples in data.items():
+            for sample in samples:
+                rec = sample.copy()  # 원본 레코드 복사
+
+                # `_pred` 로 끝나는 필드만 찾아서 평가
+                for key, pred in sample.items():
+                    if not key.endswith('_pred'):
+                        continue
+
+                    name = key[:-5]  # 'rich_pred' -> 'rich'
+                    if '</think>' in pred:
+                        pred = pred.split('</think>')[-1].strip()
+
+                    # 질문 유형별 점수 계산
+                    if q_type == "선다형":
+                        rec[f'{name}_score'] = self.evaluate_multiple_choice(pred, rec['true_answer'])
+                    elif q_type == "단답형":
+                        rec[f'{name}_exact'] = self.evaluate_short_answer(pred, rec['true_answer'])
+                    else:  # 서술형
+                        rouge = self.evaluate_long_answer(pred, rec['true_answer'])
+                        rec[f'{name}_rouge1'] = rouge['rouge1']
+                        rec[f'{name}_rouge2'] = rouge['rouge2']
+                        rec[f'{name}_rougeL'] = rouge['rougeL']
+                        rec[f'{name}_bleu']   = self.calc_BLEU(pred, rec['true_answer'])
+
+                results[q_type].append(rec)
+
+        return results
+
+
     def analyze_results(self, results):
         """결과 분석 및 요약"""
         analysis = {}
@@ -370,6 +406,7 @@ class PromptingExperiment:
             # for prompt_name in ['baseline', 'simple', 'rich', 'expert', 'format_aware', 'detailed']:
             for prompt_name in ['_'.join(x.split('_')[:-1]) for x in type_data[0].keys() if x.endswith('_pred')]:
                 if question_type == "선다형":
+                    print(type_data[0].keys())
                     scores = [item[f'{prompt_name}_score'] for item in type_data]
                     analysis[question_type][prompt_name] = {
                         'accuracy': np.mean(scores),

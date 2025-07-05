@@ -7,6 +7,7 @@ apt-get install curl git
 bash <(curl -s https://raw.githubusercontent.com/konlpy/konlpy/master/scripts/mecab.sh)
 pip install mecab
 
+# Install BLEURT for evaluation
 # git clone https://github.com/google-research/bleurt.git
 # cd bleurt
 # pip install .

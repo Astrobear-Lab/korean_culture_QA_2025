@@ -7,6 +7,7 @@ Phase 1 실험 실행 스크립트
 import argparse
 from phase1_prompting_experiment import PromptingExperiment
 import torch
+import json
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 1: Prompting Experiment")
