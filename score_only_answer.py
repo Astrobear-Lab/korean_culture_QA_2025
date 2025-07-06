@@ -1,5 +1,5 @@
 from __init__ import *
-
+from phase1_prompting_experiment import PromptingExperiment
 
 def file_merge(json_path):
 
@@ -36,7 +36,10 @@ def main():
         return
 
     experiment = PromptingExperiment(load_model=False)
-    results = experiment.only_scoring(file_merge(args.json_path))
+    results = file_merge(args.json_path)
+    with open(args.json_path.replace('.json', '_merged.json'), "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=4)
+    results = experiment.only_scoring(results)
     print(results)
     print('--')
     analysis = experiment.analyze_results(results)
