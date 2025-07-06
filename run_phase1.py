@@ -4,10 +4,9 @@ Phase 1 실험 실행 스크립트
 간단한 설정으로 프롬프팅 실험을 실행할 수 있습니다.
 """
 
-import argparse
+from __init__ import *
 from phase1_prompting_experiment import PromptingExperiment
-import torch
-import json
+
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 1: Prompting Experiment")

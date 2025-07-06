@@ -12,5 +12,4 @@ import numpy as np
 from rouge_score import rouge_scorer
 import argparse
 import warnings
-from phase1_prompting_experiment import PromptingExperiment
 warnings.filterwarnings('ignore')

@@ -1,1 +1,0 @@
-python score_only_answer.py --json_path /workspace/korean_culture_QA_2025/results/test/prompt_v2/phase1_kanana-1.5-8b-instruct-2505_test_outputs.json

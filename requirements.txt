@@ -11,3 +11,6 @@ evaluate
 bert-score
 konlpy
 nltk
+wandb
+unsloth
+unsloth_zoo
