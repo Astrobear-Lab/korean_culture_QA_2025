@@ -17,4 +17,4 @@ do
 done
 
 # Phase 2: Scoring the Answers
-python score_only_answer.py --json_path /workspace/korean_culture_QA_2025/results/phase1_checkpoint-95_merged_test_outputs.json
+python score_only_answer.py --json_path results/test/grpo_v1/skt/phase1_checkpoint-95_merged_test_outputs_merged.json
